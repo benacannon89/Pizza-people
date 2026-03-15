@@ -4,6 +4,7 @@ import pandas as pd
 # --- 1. CONFIG & DATA ---
 st.set_page_config(page_title="Pizza People", layout="wide")
 
+# Baseline profiles used to calculate Bakers' Percentages
 DOUGH_PROFILES = {
     "Neapolitan": {"flour": 162.5, "water": 105.0, "salt": 5.0, "yeast": 0.25, "oil": 0.0, "sugar": 0.0, "starter": 0.0},
     "New York Style": {"flour": 162.5, "water": 100.0, "salt": 3.2, "yeast": 1.0, "oil": 3.2, "sugar": 2.5, "starter": 0.0},
@@ -23,10 +24,9 @@ if "current_plan" not in st.session_state:
 # --- 3. SIDEBAR: PIZZA HISTORY ---
 with st.sidebar:
     st.header("🕰️ Pizza History")
-    # Mock history data matching your requested inputs
     history_data = pd.DataFrame([
         {"Pizza": "Margherita", "Grade": 9.2, "Dough": "Neapolitan", "Hydration": "65%", "Temp": "850°F", "Notes": "Perfect leopard spotting"},
-        {"Pizza": "Pepperoni", "Grade": 8.5, "Dough": "Detroit", "Hydration": "70%", "Temp": "550°F", "Notes": "Crispy cheese edges"},
+        {"Pizza": "Peach & Balsamic", "Grade": 8.1, "Dough": "Neapolitan", "Hydration": "67%", "Temp": "800°F", "Notes": "Peach juice added moisture"},
     ])
     
     selected_hist = st.selectbox("Search Historical Bakes", history_data["Pizza"].unique())
@@ -71,7 +71,7 @@ if st.session_state.stage == "Plan":
             with st.container(border=True):
                 new_name = st.text_input("Name", key=f"new_name_{i}")
                 if st.button("Save to Library", key=f"save_{i}"):
-                    st.session_state.mock_library.append(new_name)
+                    if new_name: st.session_state.mock_library.append(new_name)
                     st.rerun()
         st.session_state.current_plan['pizzas'].append(choice)
 
@@ -83,6 +83,23 @@ if st.session_state.stage == "Plan":
 elif st.session_state.stage == "Cook":
     st.subheader("👨‍🍳 Cooking Phase")
     
+    # --- SCALING LOGIC ---
+    qty = st.session_state.current_plan['qty']
+    base_f_per_piz = 153.25
+    f_waste_factor = 1.02 if qty > 4 else 1.0
+    y_efficiency_factor = 0.9 if qty >= 5 else 1.0
+    
+    total_f_calc = (qty * base_f_per_piz) * f_waste_factor
+    profile = DOUGH_PROFILES[st.session_state.current_plan['dough_type']]
+    
+    # Bakers Percentage Bases
+    p_water = profile['water'] / profile['flour']
+    p_salt = profile['salt'] / profile['flour']
+    p_yeast = profile['yeast'] / profile['flour']
+    p_starter = profile['starter'] / profile['flour']
+    p_oil = profile['oil'] / profile['flour']
+    p_sugar = profile['sugar'] / profile['flour']
+
     with st.expander("🛒 Shopping List"):
         st.checkbox(f"Dough: {st.session_state.current_plan['dough_type']} components")
         for p in set(st.session_state.current_plan['pizzas']):
@@ -90,41 +107,47 @@ elif st.session_state.stage == "Cook":
                 st.checkbox(f"Toppings for {p}")
 
     st.write("### The Dough Lab")
-    base = DOUGH_PROFILES[st.session_state.current_plan['dough_type']]
-    qty = st.session_state.current_plan['qty']
-    
     with st.container(border=True):
-        st.write("**Ingredients (Editable)**")
+        st.write("**Ingredients (Bakers' % Logic)**")
         cc1, cc2, cc3 = st.columns(3)
         with cc1:
-            f_val = st.number_input("Flour (g)", value=float(base['flour'] * qty), step=0.1, format="%.1f")
-            s_val = st.number_input("Salt (g)", value=float(base['salt'] * qty), step=0.1, format="%.1f")
+            f_in = st.number_input("Total Flour (g)", value=float(total_f_calc), step=0.1, format="%.1f")
+            s_in = st.number_input("Salt (g)", value=float(f_in * p_salt), step=0.1, format="%.1f")
         with cc2:
-            w_val = st.number_input("Water (g)", value=float(base['water'] * qty), step=0.1, format="%.1f")
+            w_in = st.number_input("Water (g)", value=float(f_in * p_water), step=0.1, format="%.1f")
             if st.session_state.current_plan['dough_type'] == "Sourdough":
-                st.number_input("Starter (g)", value=float(base['starter'] * qty), step=0.1, format="%.1f")
+                star_in = st.number_input("Starter (g)", value=float(f_in * p_starter), step=0.1, format="%.1f")
+                y_in = 0
             else:
+                star_in = 0
                 y_type = st.selectbox("Yeast Type", ["Instant Dry", "Active Dry", "Fresh"])
-                st.number_input(f"{y_type} Amount (g)", value=float(base['yeast'] * qty), step=0.1, format="%.1f")
+                y_in = st.number_input(f"{y_type} (g)", value=float(f_in * p_yeast * y_efficiency_factor), step=0.1, format="%.1f")
         with cc3:
-            hydra = (w_val / f_val * 100) if f_val > 0 else 0
-            st.metric("Live Hydration", f"{hydra:.1f}%")
+            oil_in = st.number_input("Oil/Fat (g)", value=float(f_in * p_oil)) if p_oil > 0 else 0
+            sug_in = st.number_input("Sugar (g)", value=float(f_in * p_sugar)) if p_sugar > 0 else 0
+            
+            # LIVE HYDRATION & DOUGH BALL CALC
+            real_hydra = (w_in / f_in * 100) if f_in > 0 else 0
+            st.metric("Live Hydration", f"{real_hydra:.1f}%")
+            
+            # TOTAL MASS / QTY
+            total_mass = f_in + s_in + w_in + star_in + y_in + oil_in + sug_in
+            usable_mass = total_mass / f_waste_factor
+            ball_weight = usable_mass / qty
+            st.metric("Dough Ball Weight", f"{ball_weight:.1f}g", help="Total mass divided by quantity after removing waste factor.")
 
     with st.container(border=True):
-        st.write("**Proofing & Environment**")
+        st.subheader("🔥 Step 2: Process & Bake")
         p1, p2 = st.columns(2)
         with p1:
             use_oven = st.toggle("Use proofing oven?")
-            if use_oven:
-                st.number_input("Proofing Oven Temp (°F)", value=85, step=1)
-            else:
-                st.number_input("Ambient Room Temp (°F)", value=72, step=1)
-            
+            st.number_input("Proofing Temp (°F)", value=85 if use_oven else 72)
             ferm = st.radio("Fermentation", ["Cold Ferment", "Room Temp"], horizontal=True)
             bulk = st.text_input("Bulk Time", "24h")
         with p2:
-            floor = st.number_input("Oven Floor Temp (°F)", value=850)
-            ambient = st.number_input("Outside Air (°F)", value=72)
+            st.number_input("Oven Floor Temp (°F)", value=850)
+            st.number_input("Outside Air (°F)", value=72)
+            st.text_area("Live Bake Notes")
 
     if st.button("Bake Complete! Move to Grading ➡️", use_container_width=True):
         st.session_state.stage = "Grade"
@@ -141,7 +164,7 @@ elif st.session_state.stage == "Grade":
                 st.text_area(f"Notes", key=f"n_{pizza}")
 
     if st.button("Finish Session & Archive", use_container_width=True):
-        st.success("Bake Session Archived!")
-        if st.button("Start New Session"):
+        st.success("Session Data Captured! Ready for Google Sheets integration.")
+        if st.button("Reset for Next Session"):
             st.session_state.stage = "Plan"
             st.rerun()
