@@ -1,71 +1,56 @@
-import streamlit as st
+# --- MODULE 2: DOUGH LAB ---
+elif st.session_state.page == "dough":
+    st.subheader("🧪 The Dough Lab")
 
-# --- INITIAL SETUP ---
-st.set_page_config(page_title="Pizza People", layout="centered")
+    # 1. Editable Defaults Dictionary
+    # In the future, this will be pulled from your "Dough_Styles" Sheet
+    if 'dough_defaults' not in st.session_state:
+        st.session_state.dough_defaults = {
+            "Neapolitan": {"flour": 500.0, "water": 325.0, "salt": 15.0},
+            "New York Style": {"flour": 500.0, "water": 310.0, "salt": 10.0},
+            "Detroit Style": {"flour": 400.0, "water": 280.0, "salt": 8.0},
+            "Chicago Deep Dish": {"flour": 600.0, "water": 300.0, "salt": 12.0},
+            "Other": {"flour": 500.0, "water": 325.0, "salt": 15.0}
+        }
 
-# Initialize "Mock Data" if it doesn't exist yet
-if 'pizza_library' not in st.session_state:
-    st.session_state.pizza_library = [
-        {"name": "Neapolitan Margherita", "dough": "Neapolitan", "sauce": "Classic Red", "toppings": "Mozzarella, Basil, Olive Oil"},
-        {"name": "Peach & Balsamic", "dough": "Neapolitan", "sauce": "White Base", "toppings": "Fresh Peaches, Balsamic Glaze, Goat Cheese"}
-    ]
-
-# --- HOME PAGE NAVIGATION ---
-st.markdown("<h1 style='text-align: center;'>Pizza People</h1>", unsafe_allow_html=True)
-st.write("---")
-
-# Using columns for aesthetic navigation buttons
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    show_menu = st.button("See the Menu & Order", use_container_width=True)
-with col2:
-    make_dough = st.button("Make Some Dough", use_container_width=True)
-with col3:
-    add_library = st.button("Add to Pizza Library", use_container_width=True)
-
-# --- MODULE 1: SEE THE MENU & ORDER ---
-if show_menu:
-    st.header("🍴 Digital Menu")
-    for pizza in st.session_state.pizza_library:
-        with st.container(border=True):
-            st.subheader(pizza['name'])
-            st.write(f"**Dough:** {pizza['dough']} | **Sauce:** {pizza['sauce']}")
-            st.write(f"**Ingredients:** {pizza['toppings']}")
-            if st.button(f"Order {pizza['name']}", key=pizza['name']):
-                st.success(f"Added {pizza['name']} to your shopping list!")
-
-# --- MODULE 2: MAKE SOME DOUGH ---
-elif make_dough:
-    st.header("🍞 The Dough Lab")
-    style = st.selectbox("Select Style", ["Neapolitan", "New York Style", "Chicago Deep Dish", "Detroit Style", "Other"])
+    # 2. Select Style
+    style = st.selectbox("Select Dough Style", list(st.session_state.dough_defaults.keys()))
     
-    # Logic for default ingredients based on style
-    defaults = {"Neapolitan": 300, "Detroit": 500, "New York Style": 400}
-    base_flour = defaults.get(style, 500)
-    
-    col_a, col_b = st.columns(2)
-    with col_a:
-        flour = st.number_input("Flour (g)", value=base_flour)
-        salt = st.number_input("Salt (g)", value=int(flour * 0.03))
-    with col_b:
-        water = st.number_input("Water (g)", value=int(flour * 0.65))
-        st.metric("Hydration", f"{(water/flour)*100:.1f}%")
+    # 3. Form for Current Bake (Pre-filled with editable defaults)
+    with st.container(border=True):
+        st.write(f"### Current {style} Bake")
+        col_a, col_b, col_c = st.columns(3)
         
-    st.slider("Rate this bake (0-10)", 0, 10, 5)
-    st.button("Log this Bake")
+        # Pull the specific default for the chosen style
+        current_default = st.session_state.dough_defaults[style]
+        
+        with col_a:
+            f_val = st.number_input("Flour (g)", value=current_default['flour'], step=0.1, format="%.1f")
+            s_val = st.number_input("Salt (g)", value=current_default['salt'], step=0.1, format="%.1f")
+        with col_b:
+            w_val = st.number_input("Water (g)", value=current_default['water'], step=0.1, format="%.1f")
+            hydra = (w_val / f_val) * 100 if f_val > 0 else 0
+            st.metric("Hydration %", f"{hydra:.1f}%")
+        with col_c:
+            proof = st.text_input("Bulk Proof Time (e.g. 24h)")
+            ball_time = st.text_input("Time in Ball (e.g. 6h)")
 
-# --- MODULE 3: ADD TO THE LIBRARY ---
-elif add_library:
-    st.header("📚 Add New Creation")
-    with st.form("new_pizza"):
-        new_name = st.text_input("Pizza Name")
-        new_dough = st.selectbox("Dough Base", ["Neapolitan", "New York Style", "Chicago Deep Dish", "Detroit Style"])
-        new_sauce = st.text_input("Sauce Recipe Name")
-        new_toppings = st.text_area("Ingredients List")
+        notes = st.text_area("Bake Notes (Wood vs Gas, floor temp, etc.)")
+        grade = st.slider("Final Grade", 0.0, 10.0, 5.0, step=0.5)
         
-        if st.form_submit_button("Add to Library"):
-            new_entry = {"name": new_name, "dough": new_dough, "sauce": new_sauce, "toppings": new_toppings}
-            st.session_state.pizza_library.append(new_entry)
-            st.balloons()
-            st.success("Pizza Added!")
+        if st.button("Log This Bake"):
+            st.success(f"Logged {style} bake with {hydra:.1f}% hydration!")
+
+    # 4. History Table for the Specific Style
+    st.write(f"---")
+    st.write(f"### {style} History")
+    
+    # Mock History Data with your specific columns
+    # In the final version, this will filter your "Bake_History" Sheet
+    history_cols = ["Date", "Grade", "Flour (g)", "Water (g)", "Hydration %", "Salt (g)", "Proof Time", "Time in Ball", "Notes"]
+    mock_history = pd.DataFrame([
+        ["2026-03-01", 9.0, 500.0, 325.0, "65.0%", 15.0, "24h", "6h", "Perfect crust"],
+        ["2026-02-15", 7.5, 500.0, 350.0, "70.0%", 15.0, "48h", "4h", "A bit too sticky"]
+    ], columns=history_cols)
+    
+    st.dataframe(mock_history, use_container_width=True, hide_index=True)
