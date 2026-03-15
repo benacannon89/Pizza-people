@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
 
-# --- 1. PAGE CONFIGURATION ---
-st.set_page_config(page_title="Pizza People", layout="wide", initial_sidebar_state="collapsed")
+# --- 1. CONFIG & DATA ---
+st.set_page_config(page_title="Pizza People", layout="wide")
 
-# --- 2. DOUGH PROFILES DATA ---
 DOUGH_PROFILES = {
     "Neapolitan": {"flour": 162.5, "water": 105.0, "salt": 5.0, "yeast": 0.25, "oil": 0.0, "sugar": 0.0, "starter": 0.0},
     "New York Style": {"flour": 162.5, "water": 100.0, "salt": 3.2, "yeast": 1.0, "oil": 3.2, "sugar": 2.5, "starter": 0.0},
@@ -13,95 +12,93 @@ DOUGH_PROFILES = {
     "Sourdough": {"flour": 150.0, "water": 97.5, "salt": 4.5, "yeast": 0.0, "oil": 0.0, "sugar": 0.0, "starter": 30.0}
 }
 
-# --- 3. STATE MANAGEMENT ---
-if "page" not in st.session_state:
-    st.session_state.page = "home"
+# --- 2. STATE MANAGEMENT ---
+if "view" not in st.session_state:
+    st.session_state.view = "main"
+if "plan_executed" not in st.session_state:
+    st.session_state.plan_executed = False
+if "mock_library" not in st.session_state:
+    st.session_state.mock_library = ["Margherita", "Peach & Balsamic", "Pepperoni Detroit"]
 
-# --- 4. HEADER ---
+# --- 3. UI HELPERS ---
+def go_home():
+    st.session_state.view = "main"
+    st.session_state.plan_executed = False
+
+# --- 4. NAVIGATION HEADER ---
 st.markdown("<h1 style='text-align: center; color: #FF4B4B;'>🍕 Pizza People</h1>", unsafe_allow_html=True)
+if st.session_state.view != "main":
+    if st.button("← Back to Start"): go_home()
 st.write("---")
 
-# --- 5. TOP NAVIGATION ---
-col1, col2, col3 = st.columns(3)
-if col1.button("🍴 See the Menu & Order", use_container_width=True): st.session_state.page = "menu"
-if col2.button("🧪 Make Some Dough", use_container_width=True): st.session_state.page = "dough"
-if col3.button("📚 Add to Library", use_container_width=True): st.session_state.page = "add"
+# --- 5. MAIN MENU ---
+if st.session_state.view == "main":
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📝 What Pizza We Making?", use_container_width=True, height=150):
+            st.session_state.view = "planner"
+    with col2:
+        if st.button("📚 See the Pizza Library", use_container_width=True, height=150):
+            st.session_state.view = "library"
 
-# --- 6. PAGE LOGIC ---
-
-if st.session_state.page == "menu":
-    st.header("Current Menu")
-    st.info("Menu cards will appear here once linked to your Library sheet.")
-
-elif st.session_state.page == "dough":
-    st.header("🧪 The Dough Lab")
+# --- 6. PLANNER MODULE ---
+elif st.session_state.view == "planner":
+    st.subheader("Event Planner")
     
-    selected_style = st.selectbox("Select Dough Style", list(DOUGH_PROFILES.keys()))
-    num_pizzas = st.number_input("Number of Pizzas to Make", min_value=1, value=4)
-    base = DOUGH_PROFILES[selected_style]
-    
-    # --- STEP 1: INGREDIENTS ---
-    with st.container(border=True):
-        st.subheader("🥣 Step 1: Ingredients")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            f_val = st.number_input("Flour (g)", value=float(base['flour'] * num_pizzas), step=0.1, format="%.1f")
-            s_val = st.number_input("Salt (g)", value=float(base['salt'] * num_pizzas), step=0.1, format="%.1f")
-        with c2:
-            w_val = st.number_input("Water (g)", value=float(base['water'] * num_pizzas), step=0.1, format="%.1f")
-            if selected_style == "Sourdough":
-                st.number_input("Active Starter (g)", value=float(base['starter'] * num_pizzas), step=0.1, format="%.1f")
-            else:
-                st.number_input("Yeast (g)", value=float(base['yeast'] * num_pizzas), step=0.1, format="%.1f")
-        with c3:
-            if base['oil'] > 0:
-                st.number_input("Oil/Fat (g)", value=float(base['oil'] * num_pizzas), step=0.1, format="%.1f")
-            if base['sugar'] > 0:
-                st.number_input("Sugar (g)", value=float(base['sugar'] * num_pizzas), step=0.1, format="%.1f")
-            st.metric("Hydration %", f"{(w_val / f_val * 100) if f_val > 0 else 0:.1f}%")
+    # Global Setup
+    c1, c2 = st.columns(2)
+    with c1:
+        dough_choice = st.selectbox("Global Dough Type", list(DOUGH_PROFILES.keys()))
+    with c2:
+        qty = st.number_input("How many pizzas total?", min_value=1, value=4)
 
-    # --- STEP 2: PROCESS & BAKE ---
-    with st.container(border=True):
-        st.subheader("🔥 Step 2: Process & Bake")
-        p1, p2, p3 = st.columns(3)
+    st.write("### Assign Toppings")
+    assignments = []
+    menu_options = ["+ Add New Pizza to Library"] + st.session_state.mock_library
+    
+    for i in range(qty):
+        choice = st.selectbox(f"Pizza #{i+1}", menu_options, key=f"piz_{i}")
+        if choice == "+ Add New Pizza to Library":
+            with st.expander("Define New Pizza", expanded=True):
+                new_name = st.text_input("Pizza Name", key=f"name_{i}")
+                new_sauce = st.text_area("Sauce Recipe", key=f"sauce_{i}")
+                new_top = st.text_area("Ingredients", key=f"top_{i}")
+                if st.button("Save to Library", key=f"save_{i}"):
+                    st.session_state.mock_library.append(new_name)
+                    st.toast("Saved!")
+        assignments.append(choice)
+
+    if st.button("🚀 Let's Get Started", use_container_width=True, type="primary"):
+        st.session_state.plan_executed = True
+
+    # EXECUTION PHASE
+    if st.session_state.plan_executed:
+        st.write("---")
+        tab1, tab2 = st.tabs(["🛒 (1) Buy the Ingredients", "🥣 (2) Make the Dough"])
         
-        with p1:
-            st.write("**Fermentation**")
-            ferm_type = st.radio("Type", ["Cold Ferment", "Room Temp"], horizontal=True)
+        with tab1:
+            st.write("### Grocery List")
+            # Logic: Pull ingredients from assigned pizzas
+            st.checkbox(f"{qty}x portions of {dough_choice} ingredients")
+            for a in set(assignments):
+                st.checkbox(f"Ingredients for {a}")
+        
+        with tab2:
+            st.write(f"### Dough Lab: {dough_choice}")
+            base = DOUGH_PROFILES[dough_choice]
             
-            # Logic for Dynamic Defaults
-            if selected_style == "Sourdough":
-                default_bulk, default_ball = ("24-48h", "6h") if ferm_type == "Cold Ferment" else ("8-12h", "2-4h")
-            else:
-                default_bulk, default_ball = ("24h", "4-6h") if ferm_type == "Cold Ferment" else ("4-8h", "2h")
-
-            if ferm_type == "Room Temp":
-                st.number_input("Room Temp (°F)", value=72)
+            # Filtered Dough Lab pre-populated
+            with st.container(border=True):
+                cc1, cc2 = st.columns(2)
+                f_val = cc1.number_input("Flour (g)", value=float(base['flour'] * qty), format="%.1f")
+                w_val = cc2.number_input("Water (g)", value=float(base['water'] * qty), format="%.1f")
+                st.metric("Hydration", f"{(w_val/f_val*100):.1f}%")
             
-            st.text_input("Bulk Duration", value=default_bulk)
-            st.text_input("Ball Duration", value=default_ball)
-            
-        with p2:
-            st.write("**Environment**")
-            st.number_input("Floor Temp (°F)", value=850, step=25)
-            st.number_input("Outside Air (°F)", value=72, step=1)
-            
-        with p3:
-            st.write("**Results**")
-            st.slider("Final Grade", 0.0, 10.0, 8.0, step=0.1)
+            st.write("#### Historical Bakes (Filtered)")
+            st.caption(f"Showing previous {dough_choice} results...")
+            st.table(pd.DataFrame({"Date": ["2026-03-01"], "Grade": [9.1], "Notes": ["Great spring"]}))
 
-        st.text_area("Bake Notes")
-        if st.button("Log This Experiment", use_container_width=True):
-            st.success("Bake logged locally!")
-
-elif st.session_state.page == "add":
-    st.header("📚 Add to the Pizza Library")
-    with st.form("add_pizza_form"):
-        st.text_input("Pizza Name")
-        st.selectbox("Dough Type", list(DOUGH_PROFILES.keys()))
-        st.text_area("Sauce Recipe")
-        st.text_area("Topping List")
-        st.form_submit_button("Save Pizza")
-
-else:
-    st.write("Welcome to Pizza People. Use the buttons above to get started.")
+# --- 7. LIBRARY MODULE ---
+elif st.session_state.view == "library":
+    st.subheader("Pizza Library Database")
+    st.dataframe(pd.DataFrame({"Pizza": st.session_state.mock_library}), use_container_width=True)
