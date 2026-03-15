@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 
 # --- 1. CONFIG & DATA ---
 st.set_page_config(page_title="Pizza People", layout="wide")
@@ -21,24 +20,41 @@ if "mock_library" not in st.session_state:
 if "current_plan" not in st.session_state:
     st.session_state.current_plan = {"dough_type": "Neapolitan", "qty": 4, "pizzas": []}
 
-# --- 3. HEADER & PIPELINE NAV ---
-st.markdown("<h1 style='text-align: center; color: #FF4B4B;'>🍕 Pizza People</h1>", unsafe_allow_html=True)
+# --- 3. SIDEBAR: PIZZA HISTORY ---
+with st.sidebar:
+    st.header("🕰️ Pizza History")
+    # Mock history data matching your requested inputs
+    history_data = pd.DataFrame([
+        {"Pizza": "Margherita", "Grade": 9.2, "Dough": "Neapolitan", "Hydration": "65%", "Temp": "850°F", "Notes": "Perfect leopard spotting"},
+        {"Pizza": "Pepperoni", "Grade": 8.5, "Dough": "Detroit", "Hydration": "70%", "Temp": "550°F", "Notes": "Crispy cheese edges"},
+    ])
+    
+    selected_hist = st.selectbox("Search Historical Bakes", history_data["Pizza"].unique())
+    hist_details = history_data[history_data["Pizza"] == selected_hist].iloc[0]
+    
+    with st.container(border=True):
+        st.write(f"**Grade: {hist_details['Grade']}/10**")
+        st.caption(f"Style: {hist_details['Dough']} | {hist_details['Hydration']}")
+        st.info(hist_details["Notes"])
+    
+    st.write("---")
+    st.header("📚 Full Library")
+    st.dataframe(pd.DataFrame(st.session_state.mock_library, columns=["Name"]), hide_index=True)
 
-# Aesthetic Pipeline Progress Bar
+# --- 4. HEADER & PIPELINE NAV ---
+st.markdown("<h1 style='text-align: center; color: #FF4B4B;'>🍕 Pizza People</h1>", unsafe_allow_html=True)
 st.write("---")
 cols = st.columns(3)
 stages = ["Plan", "Cook", "Grade"]
 for i, s in enumerate(stages):
-    if st.session_state.stage == s:
-        cols[i].markdown(f"<h3 style='text-align: center; color: #FF4B4B; border-bottom: 3px solid #FF4B4B;'>{i+1}. {s}</h3>", unsafe_allow_html=True)
-    else:
-        cols[i].markdown(f"<h3 style='text-align: center; color: gray;'>{i+1}. {s}</h3>", unsafe_allow_html=True)
+    color = "#FF4B4B" if st.session_state.stage == s else "gray"
+    border = "3px solid #FF4B4B" if st.session_state.stage == s else "none"
+    cols[i].markdown(f"<h3 style='text-align: center; color: {color}; border-bottom: {border};'>{i+1}. {s}</h3>", unsafe_allow_html=True)
 st.write("---")
 
 # --- STAGE 1: PLAN ---
 if st.session_state.stage == "Plan":
     st.subheader("📝 Planning the Session")
-    
     c1, c2 = st.columns(2)
     with c1:
         st.session_state.current_plan['dough_type'] = st.selectbox("Global Dough Type", list(DOUGH_PROFILES.keys()))
@@ -67,7 +83,7 @@ if st.session_state.stage == "Plan":
 elif st.session_state.stage == "Cook":
     st.subheader("👨‍🍳 Cooking Phase")
     
-    with st.expander("🛒 Shopping List (Toggle to check items)"):
+    with st.expander("🛒 Shopping List"):
         st.checkbox(f"Dough: {st.session_state.current_plan['dough_type']} components")
         for p in set(st.session_state.current_plan['pizzas']):
             if p not in ["Unassigned", "+ Add New Pizza"]:
@@ -80,22 +96,30 @@ elif st.session_state.stage == "Cook":
     with st.container(border=True):
         st.write("**Ingredients (Editable)**")
         cc1, cc2, cc3 = st.columns(3)
-        f_val = cc1.number_input("Flour (g)", value=float(base['flour'] * qty), step=0.1, format="%.1f")
-        s_val = cc1.number_input("Salt (g)", value=float(base['salt'] * qty), step=0.1, format="%.1f")
-        w_val = cc2.number_input("Water (g)", value=float(base['water'] * qty), step=0.1, format="%.1f")
-        
-        if st.session_state.current_plan['dough_type'] == "Sourdough":
-            st.number_input("Starter (g)", value=float(base['starter'] * qty), step=0.1, format="%.1f")
-        else:
-            st.number_input("Yeast (g)", value=float(base['yeast'] * qty), step=0.1, format="%.1f")
-        
-        hydra = (w_val / f_val * 100) if f_val > 0 else 0
-        cc3.metric("Live Hydration", f"{hydra:.1f}%")
+        with cc1:
+            f_val = st.number_input("Flour (g)", value=float(base['flour'] * qty), step=0.1, format="%.1f")
+            s_val = st.number_input("Salt (g)", value=float(base['salt'] * qty), step=0.1, format="%.1f")
+        with cc2:
+            w_val = st.number_input("Water (g)", value=float(base['water'] * qty), step=0.1, format="%.1f")
+            if st.session_state.current_plan['dough_type'] == "Sourdough":
+                st.number_input("Starter (g)", value=float(base['starter'] * qty), step=0.1, format="%.1f")
+            else:
+                y_type = st.selectbox("Yeast Type", ["Instant Dry", "Active Dry", "Fresh"])
+                st.number_input(f"{y_type} Amount (g)", value=float(base['yeast'] * qty), step=0.1, format="%.1f")
+        with cc3:
+            hydra = (w_val / f_val * 100) if f_val > 0 else 0
+            st.metric("Live Hydration", f"{hydra:.1f}%")
 
     with st.container(border=True):
         st.write("**Proofing & Environment**")
         p1, p2 = st.columns(2)
         with p1:
+            use_oven = st.toggle("Use proofing oven?")
+            if use_oven:
+                st.number_input("Proofing Oven Temp (°F)", value=85, step=1)
+            else:
+                st.number_input("Ambient Room Temp (°F)", value=72, step=1)
+            
             ferm = st.radio("Fermentation", ["Cold Ferment", "Room Temp"], horizontal=True)
             bulk = st.text_input("Bulk Time", "24h")
         with p2:
@@ -109,24 +133,15 @@ elif st.session_state.stage == "Cook":
 # --- STAGE 3: GRADE ---
 elif st.session_state.stage == "Grade":
     st.subheader("⭐ Grading & Notes")
-    
     for pizza in st.session_state.current_plan['pizzas']:
         if pizza not in ["Unassigned", "+ Add New Pizza"]:
             with st.container(border=True):
                 st.write(f"### {pizza}")
-                g = st.slider(f"Grade for {pizza}", 0.0, 10.0, 8.0, step=0.1, key=f"grade_{pizza}")
-                st.text_area(f"Notes for {pizza}", key=f"notes_{pizza}")
+                st.slider(f"Grade", 0.0, 10.0, 8.0, step=0.1, key=f"g_{pizza}")
+                st.text_area(f"Notes", key=f"n_{pizza}")
 
     if st.button("Finish Session & Archive", use_container_width=True):
         st.success("Bake Session Archived!")
         if st.button("Start New Session"):
             st.session_state.stage = "Plan"
             st.rerun()
-
-# --- SIDEBAR: VIEW LIBRARY ---
-with st.sidebar:
-    st.header("Library Database")
-    st.dataframe(pd.DataFrame(st.session_state.mock_library, columns=["Pizza Name"]), hide_index=True)
-    if st.button("Back to Home"):
-        st.session_state.stage = "Plan"
-        st.rerun()
